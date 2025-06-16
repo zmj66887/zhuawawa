@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>消息测试客户端 A（内部认证版）</title>
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@7.0.12/dist/browser/signalr.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .chat-area {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .messages {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            height: 400px;
+            background-color: #f9f9f9;
+            display: flex;
+            flex-direction: column;
+        }
+        .log-area {
+            flex: 1;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .logs {
+            padding: 10px;
+            overflow-y: auto;
+            height: 400px;
+            background-color: #f0f0f0;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .input-area {
+            display: flex;
+            padding: 10px;
+            background-color: #eee;
+        }
+        .input-area input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+        .input-area button {
+            margin-left: 10px;
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .input-area button:hover {
+            background-color: #45a049;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            border-radius: 18px;
+            max-width: 70%;
+            word-wrap: break-word;
+            position: relative;
+            clear: both;
+        }
+        .message-content {
+            margin: 0;
+        }
+        .message-sender {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 3px;
+            font-weight: bold;
+        }
+        .received {
+            background-color: #e1f5fe;
+            border-bottom-left-radius: 5px;
+            align-self: flex-start;
+            float: left;
+        }
+        .sent {
+            background-color: #e8f5e9;
+            border-bottom-right-radius: 5px;
+            align-self: flex-end;
+            float: right;
+            text-align: right;
+        }
+        .system {
+            background-color: #fff3e0;
+            text-align: center;
+            font-style: italic;
+            max-width: 90%;
+            margin: 5px auto;
+            border-radius: 10px;
+        }
+        .connection-info {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+        .status {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .connected {
+            background-color: #4CAF50;
+        }
+        .disconnected {
+            background-color: #f44336;
+        }
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .control-row {
+            display: flex;
+            gap: 10px;
+        }
+        .controls input, .controls button, .controls select {
+            padding: 8px;
+        }
+        .controls label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        h3 {
+            margin: 0;
+            padding: 10px;
+            background-color: #ddd;
+        }
+        .clear-btn {
+            background-color: #f44336;
+        }
+        .clear-btn:hover {
+            background-color: #e53935;
+        }
+        .message-time {
+            font-size: 10px;
+            color: #999;
+            margin-top: 3px;
+        }
+    </style>
+</head>
+<body>
+    <h1>消息测试客户端 A（内部认证版）</h1>
+
+    <div class="connection-info">
+        <div>
+            <span class="status disconnected" id="status-indicator"></span>
+            <span id="connection-status">未连接</span>
+        </div>
+        <div>连接ID: <span id="connection-id">-</span></div>
+        <div>会话ID: <span id="session-id">-</span></div>
+        <div>客户端ID: <span id="client-id">-</span></div>
+        <div>自定义发送者ID: <span id="custom-sender-id">-</span></div>
+    </div>
+
+    <div class="controls">
+        <div class="control-row">
+            <div style="flex: 2;">
+                <label for="base-url">服务器地址:</label>
+                <input type="text" id="base-url" placeholder="输入服务器地址" value="http://localhost:5236">
+            </div>
+        </div>
+        <div class="control-row">
+            <div style="flex: 1;">
+                <label for="session-input">会话ID:</label>
+                <input type="text" id="session-input" placeholder="输入会话ID" value="test-session-123">
+            </div>
+            <div style="flex: 1;">
+                <label for="client-input">客户端ID:</label>
+                <input type="text" id="client-input" placeholder="输入客户端ID" value="client-a">
+            </div>
+        </div>
+        <div class="control-row">
+            <div style="flex: 1;">
+                <label for="custom-sender-input">自定义发送者ID :</label>
+                <input type="text" id="custom-sender-input" placeholder="输入自定义发送者ID" value="user-a">
+            </div>
+            <div style="flex: 1;">
+                <label for="sender-name">发送者名称 :</label>
+                <input type="text" id="sender-name" placeholder="发送者名称" value="客户端A">
+            </div>
+        </div>
+        <div class="control-row">
+            <div style="flex: 1;">
+                <label for="source-type">应用来源类型:</label>
+                <select id="source-type">
+                    <option value="1">应用</option>
+                    <option value="2">工作流</option>
+                    <option value="3">渠道</option>
+                </select>
+            </div>
+            <div style="flex: 1;">
+                <label for="jwt-token">JWT Token (必需):</label>
+                <input type="text" id="jwt-token" placeholder="输入JWT令牌" style="width: 100%;">
+            </div>
+        </div>
+        <div class="control-row">
+            <button id="connect-btn">连接</button>
+            <button id="disconnect-btn">断开</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="chat-area">
+            <h3>消息</h3>
+            <div class="messages" id="messages"></div>
+            <div class="input-area">
+                <input type="text" id="message-input" placeholder="输入消息...">
+                <button id="send-btn">发送</button>
+                <button id="clear-chat-btn" class="clear-btn">清空</button>
+            </div>
+        </div>
+
+        <div class="log-area">
+            <h3>连接和消息日志</h3>
+            <div class="logs" id="logs"></div>
+            <div class="input-area">
+                <button id="clear-log-btn" class="clear-btn">清空日志</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM元素
+        const baseUrlInput = document.getElementById('base-url');
+        const sessionInput = document.getElementById('session-input');
+        const clientInput = document.getElementById('client-input');
+        const customSenderInput = document.getElementById('custom-sender-input');
+        const senderNameInput = document.getElementById('sender-name');
+        const sourceTypeSelect = document.getElementById('source-type');
+        const jwtTokenInput = document.getElementById('jwt-token');
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+        const messageInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+        const messagesContainer = document.getElementById('messages');
+        const logsContainer = document.getElementById('logs');
+        const clearChatBtn = document.getElementById('clear-chat-btn');
+        const clearLogBtn = document.getElementById('clear-log-btn');
+        const statusIndicator = document.getElementById('status-indicator');
+        const connectionStatus = document.getElementById('connection-status');
+        const connectionIdSpan = document.getElementById('connection-id');
+        const sessionIdSpan = document.getElementById('session-id');
+        const clientIdSpan = document.getElementById('client-id');
+        const customSenderIdSpan = document.getElementById('custom-sender-id');
+
+        // 配置
+        let connection = null;
+        let hubUrl = '';
+        let sessionId = '';
+        let clientId = '';
+        let customSenderId = '';
+        let isConnected = false;
+
+        // 存储已接收的消息ID，用于去重
+        const receivedMessageIds = new Set();
+
+        // 辅助函数 - 日志记录
+        function log(message, type = 'info') {
+            const now = new Date();
+            const timestamp = `${now.toLocaleDateString()} ${now.toLocaleTimeString()}.${now.getMilliseconds().toString().padStart(3, '0')}`;
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+
+            if (type === 'error') {
+                logEntry.style.color = 'red';
+            } else if (type === 'success') {
+                logEntry.style.color = 'green';
+            } else if (type === 'warn') {
+                logEntry.style.color = 'orange';
+            }
+
+            logsContainer.appendChild(logEntry);
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        // 消息显示
+        function displayMessage(content, isSent = false, isSystem = false, senderName = null) {
+            const messageElement = document.createElement('div');
+            const now = new Date();
+            const timeStr = now.getHours().toString().padStart(2, '0') + ':' +
+                           now.getMinutes().toString().padStart(2, '0');
+
+            if (isSystem) {
+                messageElement.className = 'message system';
+                messageElement.innerHTML = `<p class="message-content">${content}</p>
+                                           <div class="message-time">${timeStr}</div>`;
+            } else {
+                messageElement.className = isSent ? 'message sent' : 'message received';
+
+                // 提取发送者名称（如果消息内容格式为 "发送者: 消息内容"）
+                let displayName = senderName;
+                let displayContent = content;
+
+                if (!displayName && !isSent && typeof content === 'string' && content.includes(': ')) {
+                    const parts = content.split(': ');
+                    if (parts.length >= 2) {
+                        displayName = parts[0];
+                        displayContent = parts.slice(1).join(': ');
+                    }
+                }
+
+                if (!displayName) {
+                    displayName = isSent ? (senderNameInput.value.trim() || '我') : '对方';
+                }
+
+                messageElement.innerHTML = `<div class="message-sender">${displayName}</div>
+                                           <p class="message-content">${displayContent}</p>
+                                           <div class="message-time">${timeStr}</div>`;
+            }
+
+            messagesContainer.appendChild(messageElement);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            // 添加一个清除浮动元素，确保消息布局正确
+            const clearElement = document.createElement('div');
+            clearElement.style.clear = 'both';
+            messagesContainer.appendChild(clearElement);
+        }
+
+        // 连接到SignalR Hub
+        function connectToHub() {
+            // 检查是否已连接
+            if (isConnected) {
+                log('已经连接到Hub，请先断开连接', 'warn');
+                return;
+            }
+
+            const baseUrl = baseUrlInput.value.trim();
+            sessionId = sessionInput.value.trim();
+            clientId = clientInput.value.trim();
+            customSenderId = customSenderInput.value.trim();
+            const sourceType = parseInt(sourceTypeSelect.value);
+            const jwtToken = jwtTokenInput.value.trim();
+
+            if (!baseUrl) {
+                log('服务器地址不能为空', 'error');
+                return;
+            }
+
+            if (!sessionId) {
+                log('会话ID不能为空', 'error');
+                return;
+            }
+
+            if (!clientId) {
+                log('客户端ID不能为空', 'error');
+                return;
+            }
+
+            if (!jwtToken) {
+                log('JWT Token不能为空', 'error');
+                return;
+            }
+
+            // 更新UI
+            sessionIdSpan.textContent = sessionId;
+            clientIdSpan.textContent = clientId;
+            customSenderIdSpan.textContent = customSenderId || '(使用系统自动分配)';
+
+            // 构建内部认证Hub URL
+            hubUrl = `${baseUrl}/message/internal-admin`;
+            log(`连接到内部Hub: ${hubUrl}`, 'info');
+
+            // 创建SignalR连接（带认证）
+            connection = new signalR.HubConnectionBuilder()
+                .withUrl(hubUrl, {
+                    accessTokenFactory: () => jwtToken
+                })
+                .withAutomaticReconnect()
+                .configureLogging(signalR.LogLevel.Information)
+                .build();
+
+            // 设置接收消息的处理程序
+            connection.on('ReceiveMessage', (message) => {
+                // 记录接收到的消息
+                log(`收到消息: ${JSON.stringify(message)}`, 'success');
+
+                // 确定是否为自己发送的消息
+                const isSent = customSenderId
+                    ? message.senderId === customSenderId
+                    : message.senderId === connection.connectionId;
+
+                // 如果是自己发送的消息，不再显示（因为发送时已经在聊天栏显示了）
+                // 注意：如果需要显示自己的消息确认，可以删除这个条件
+                if (isSent) {
+                    log(`跳过显示自己发送的消息`, 'info');
+                    return;
+                }
+
+                // 提取消息内容
+                let displayContent = '';
+
+                // 根据消息类型处理
+                console.log('原始消息对象:', message);
+
+                // 判断消息类型 - 支持数字类型(1)和字符串类型('Text')
+                // MessageType枚举: 0=Unknown, 1=Text, 2=Image, 3=Audio, 4=Video, 5=File
+                const isTextMessage = message.type === 'Text' || message.type === 1;
+
+                if (isTextMessage) {
+                    // 文本类型消息处理
+                    if (message.content && typeof message.content === 'object') {
+                        if (message.content.text) {
+                            displayContent = message.content.text;
+                        } else if (message.content['text']) { // 处理可能的大小写或键名差异
+                            displayContent = message.content['text'];
+                        } else {
+                            // 尝试在content中找到可能的文本内容
+                            const contentStr = JSON.stringify(message.content);
+                            const textMatch = contentStr.match(/"text":"(.+?)"/);
+                            if (textMatch && textMatch[1]) {
+                                displayContent = textMatch[1];
+                            } else {
+                                displayContent = contentStr;
+                            }
+                        }
+                    } else if (typeof message.content === 'string') {
+                        displayContent = message.content;
+                    } else {
+                        displayContent = '无法解析的文本消息';
+                    }
+                } else {
+                    // 映射数字消息类型到可读名称
+                    let typeName = '未知';
+                    switch(message.type) {
+                        case 0: typeName = '未知'; break;
+                        case 1: typeName = '文本'; break;
+                        case 2: typeName = '图片'; break;
+                        case 3: typeName = '语音'; break;
+                        case 4: typeName = '视频'; break;
+                        case 5: typeName = '文件'; break;
+                        default: typeName = message.type || '未知';
+                    }
+
+                    displayContent = `[${typeName} 类型消息]`;
+                }
+
+                // 显示消息
+                displayMessage(displayContent, false, false, message.senderName);
+            });
+
+            // 系统通知
+            connection.on('SystemNotification', (message) => {
+                log(`系统通知: ${message}`, 'info');
+                displayMessage(message, false, true);
+            });
+
+            // 用户状态变更
+            connection.on('UserStatusChanged', (userId, isOnline) => {
+                const status = isOnline ? '上线' : '下线';
+                log(`用户 ${userId} ${status}`, 'info');
+                displayMessage(`用户 ${userId} ${status}`, false, true);
+            });
+
+            // 开始连接
+            connection.start()
+                .then(() => {
+                    isConnected = true;
+                    connectionIdSpan.textContent = connection.connectionId;
+                    statusIndicator.classList.remove('disconnected');
+                    statusIndicator.classList.add('connected');
+                    connectionStatus.textContent = '已连接';
+                    log(`连接成功, ID: ${connection.connectionId}`, 'success');
+
+                    // 加入会话 - 传递自定义发送者ID、应用来源类型和来源
+                    // 注意：参数顺序为 sessionId, clientId, sourceType, customSenderId, source
+                    const source = "内部测试客户端A";
+                    connection.invoke('JoinSession', sessionId, clientId, parseInt(sourceType), customSenderId)
+                        .then(() => {
+                            log(`成功加入会话: ${sessionId}, 应用来源类型: ${sourceType}, 来源: ${source}`, 'success');
+                        })
+                        .catch(err => {
+                            log(`加入会话失败: ${err}`, 'error');
+                        });
+                })
+                .catch(err => {
+                    isConnected = false;
+                    log(`连接失败: ${err}`, 'error');
+                });
+
+            // 设置重连通知
+            connection.onreconnecting((error) => {
+                statusIndicator.classList.remove('connected');
+                statusIndicator.classList.add('disconnected');
+                connectionStatus.textContent = '正在重新连接...';
+                log(`连接断开，正在尝试重连: ${error}`, 'warn');
+            });
+
+            connection.onreconnected((connectionId) => {
+                isConnected = true;
+                connectionIdSpan.textContent = connectionId;
+                statusIndicator.classList.remove('disconnected');
+                statusIndicator.classList.add('connected');
+                connectionStatus.textContent = '已连接';
+                log(`已重新连接, 新ID: ${connectionId}`, 'success');
+
+                // 重连后重新加入会话 - 传递自定义发送者ID、应用来源类型和来源
+                // 注意：参数顺序为 sessionId, clientId, sourceType, customSenderId, source
+                const source = "内部测试客户端A";
+                connection.invoke('JoinSession', sessionId, clientId, parseInt(sourceTypeSelect.value), customSenderId, source)
+                    .then(() => {
+                        log(`重连后重新加入会话: ${sessionId}, 应用来源类型: ${sourceTypeSelect.value}, 来源: ${source}`, 'success');
+                    })
+                    .catch(err => {
+                        log(`重连后加入会话失败: ${err}`, 'error');
+                    });
+            });
+
+            connection.onclose((error) => {
+                isConnected = false;
+                statusIndicator.classList.remove('connected');
+                statusIndicator.classList.add('disconnected');
+                connectionStatus.textContent = '已断开';
+                log(`连接已关闭: ${error ? error.message : 'No error details'}`, 'warn');
+            });
+        }
+
+        // 断开连接
+        function disconnectFromHub() {
+            if (!connection || !isConnected) {
+                log('没有活动的连接', 'warn');
+                return;
+            }
+
+            // 离开会话 - 可以传递自定义发送者ID
+            connection.invoke('LeaveSession', sessionId, customSenderId)
+                .then(() => {
+                    log(`已离开会话: ${sessionId}`, 'info');
+
+                    connection.stop()
+                        .then(() => {
+                            isConnected = false;
+                            statusIndicator.classList.remove('connected');
+                            statusIndicator.classList.add('disconnected');
+                            connectionStatus.textContent = '已断开';
+                            connectionIdSpan.textContent = '-';
+                            log('连接已断开', 'info');
+                        })
+                        .catch(err => {
+                            log(`断开连接失败: ${err}`, 'error');
+                        });
+                })
+                .catch(err => {
+                    log(`离开会话失败: ${err}`, 'error');
+
+                    // 尝试直接断开连接
+                    connection.stop()
+                        .then(() => {
+                            isConnected = false;
+                            statusIndicator.classList.remove('connected');
+                            statusIndicator.classList.add('disconnected');
+                            connectionStatus.textContent = '已断开';
+                            connectionIdSpan.textContent = '-';
+                            log('连接已断开', 'info');
+                        })
+                        .catch(err => {
+                            log(`断开连接失败: ${err}`, 'error');
+                        });
+                });
+        }
+
+        // 发送消息
+        function sendMessage() {
+            if (!connection || !isConnected) {
+                log('未连接到Hub，无法发送消息', 'error');
+                return;
+            }
+
+            const message = messageInput.value.trim();
+            if (!message) {
+                return;
+            }
+
+            // 获取发送者名称
+            const senderName = senderNameInput.value.trim() || "客户端A";
+
+            log(`正在发送消息: "${message}" 到会话: ${sessionId}`, 'info');
+
+            // 立即在本地显示消息（不等待服务器响应）
+            displayMessage(message, true, false, senderName);
+
+            // 使用SendTextMessage方法，传递所有参数，包括自定义发送者ID
+            connection.invoke('SendTextMessage', sessionId, message, senderName, customSenderId)
+                .then(() => {
+                    messageInput.value = '';
+                    log('消息发送成功', 'success');
+                })
+                .catch(err => {
+                    log(`发送消息失败: ${err}`, 'error');
+                });
+        }
+
+        // 事件监听器
+        connectBtn.addEventListener('click', connectToHub);
+        disconnectBtn.addEventListener('click', disconnectFromHub);
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        clearChatBtn.addEventListener('click', () => {
+            messagesContainer.innerHTML = '';
+        });
+
+        clearLogBtn.addEventListener('click', () => {
+            logsContainer.innerHTML = '';
+        });
+
+        // 页面加载时初始化
+        window.addEventListener('load', () => {
+            log('测试客户端已加载，请配置连接信息并提供JWT Token', 'info');
+        });
+
+        // 页面关闭前断开连接
+        window.addEventListener('beforeunload', () => {
+            if (connection && isConnected) {
+                connection.stop();
+            }
+        });
+    </script>
+</body>
+</html>
